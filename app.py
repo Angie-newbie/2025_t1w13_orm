@@ -21,8 +21,8 @@ class Product(db.Model):
 
     name = db.Column(db.String(150), nullable=False)
     description = db.Column(db.Text)
-    price = db.Column(db.Float(precision=2))
-    stock = db.Column(db.Integer, db.CheckConstraint('stock >= 0'))    
+    price = db.Column(db.Float(precision=2), nullable=False)
+    stock = db.Column(db.Integer, db.CheckConstraint('stock >= 0'), default = 0)    
 
 
 # Schema
@@ -35,7 +35,6 @@ class ProductSchema(ma.Schema):
 @app.route('/')
 def home():
     return 'Hello!'
-
 
 # R - Read (all
 @app.route('/products')
@@ -65,19 +64,62 @@ def get_one_product(product_id):
 @app.route('/products', methods=['POST'])
 def create_product():
     # parse the incoming json body
-    data = ProductSchema().load(request.json)
+    data = ProductSchema(exclude=['id']).load(request.json)
     new_product = Product(
         name = data['name'],
-        description = data['description'], 
+        description = data.get('description', ''), 
         price = data['price'],
-        stock = data['stock']
+        stock = data.get('stock')
     )
     db.session.add(new_product)
     db.session.commit()
-    return ProductSchema().dump(new_product)
+    return ProductSchema().dump(new_product), 201
     # Add to db session
     # commit to db
     #return the new project
+
+# Delete Product
+# DELETE /products/<int:product_id>
+# 1. Select the product with the given product_id
+# 2. Execute the statement (scalar)
+# 3. Delete the product if exists, otherwise return error
+# 4. If deletion success, return status code with no content
+@app.route('/products/<int:product_id>', methods=['DELETE'])
+def delete_one_product(product_id):
+    # check the db for a product with an id that matches
+    # get product with given id
+    # select * from products where id = product.id
+    stmt = db.select(Product).filter_by(id=product_id)
+    product = db.session.scalar(stmt)
+    if product:
+        db.session.delete(product)
+        db.session.commit()
+        return {}, 204 
+    else:
+        return {"error": f"product with id {product_id} not found"}, 404
+
+
+# U- update a product
+# 1. Create statement to select the product with the given product_id
+# 2. Execute the statement (scalar)
+# 3. If the product exsits, update the field and commit, then reutn the update 
+
+@app.route('/products/<int:product_id>', methods=['PUT'])
+def update_one_product(product_id):
+    data = ProductSchema(exclude=['id']).load(request.json)
+    stmt = db.select(Product).filter_by(id=product_id)
+    product = db.session.scalar(stmt)
+    if product:
+        product.name = data['name'],
+        product.description = data.get('description', ''), 
+        product.price = data['price'],
+        product.stock = data.get('stock')
+
+        db.session.commit()
+    
+        return ProductSchema().dump(product),200
+    else:
+        return {"error": f"product with id {product_id} not found"}, 404
 
 
 @app.cli.command('init_db')
